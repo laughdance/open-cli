@@ -61,7 +61,7 @@ use tokio::fs::File;
  * ```
  */
 pub struct CacheManager {
-    /** Path to the cache file storing all hash entries */
+    // Path to the cache file storing all hash entries
     cache_file: PathBuf,
 }
 
@@ -94,7 +94,7 @@ impl CacheManager {
      * - Empty lines are ignored
      */
     pub async fn rate_cache_grity(&self) -> Result<bool> {
-        /** If cache file doesn't exist, it's considered valid (empty cache) */
+        // If cache file doesn't exist, it's considered valid (empty cache)
         if !self.cache_file.exists() {
             return Ok(true);
         }
@@ -103,27 +103,27 @@ impl CacheManager {
         let mut content_lines = content.lines();
         let mut arg2_valid = true;
         
-        /** Iterate through lines in pairs (filename, hash) */
+        // Iterate through lines in pairs (filename, hash)
         while let Some(filename) = content_lines.next() {
-            /** Skip empty lines between entries */
+            // Skip empty lines between entries
             if filename.is_empty() {
                 continue;
             }
-            /** Each filename must be followed by a hash line */
+            // Each filename must be followed by a hash line
             if let Some(hash_line) = content_lines.next() {
                 if !hash_line.starts_with("argon2:") {
-                    /** Found filename not followed by proper hash line */
+                    // Found filename not followed by proper hash line
                     arg2_valid = false;
                     break;
-                } /** if */
+                } // if
             } else {
-                /** Filename at end of file without corresponding hash */
+                // Filename at end of file without corresponding hash
                 arg2_valid = false;
                 break;
-            } /** else */
-        } /** while */
+            } // else
+        } // while
         Ok(arg2_valid)
-    } /** rate_cache_grity */
+    } // rate_cache_grity
     
     /** Repairs a corrupted cache file by rebuilding it from valid entries
      * 
@@ -139,41 +139,40 @@ impl CacheManager {
      */
     pub async fn repair_cache(&self) -> Result<()> {
         if !self.rate_cache_grity().await? {
-            /** Load all valid entries (parser automatically skips invalid ones) */
+            // Load all valid entries (parser automatically skips invalid ones)
             let hashes = self.load_all_hashes().await?;
             
-            /** Clear corrupted cache */
+            // Clear corrupted cache
             self.clear_cache().await?;
             
-            /** Rebuild cache with valid entries only */
+            // Rebuild cache with valid entries only
             for (filename, hash) in hashes {
                 self.store_hash_internal(&filename, &hash).await?;
             }
         }
         Ok(())
-    } /** repair_cache */
+    } // repair_cache
 
-    /** Internal method to store hash without extensive validation
-     * Used by repair_cache and other internal methods
-     */
+    // Internal method to store hash without extensive validation
+    // Used by repair_cache and other internal methods
     async fn store_hash_internal(&self, filename: &str, argon2_hash: &str) -> Result<()> {
         let entry = format!("{}\nargon2:{}\n", filename, argon2_hash);
 
-        /** Ensure cache directory exists */
+        // Ensure cache directory exists
         if let Some(parent) = self.cache_file.parent() {
             fs::create_dir_all(parent).await?;
         }
 
-        /** Append entry to cache file */
+        // Append entry to cache file
         let mut file = tokio::fs::OpenOptions::new()
-            .create(true)      /** Create file if it doesn't exist */
-            .append(true)      /** Append to end of file */
+            .create(true)      // Create file if it doesn't exist
+            .append(true)      // Append to end of file
             .open(&self.cache_file)
             .await?;
 
         file.write_all(entry.as_bytes()).await?;
         Ok(())
-    } /** store_hash_internal */
+    } // store_hash_internal
 
     /** Stores a filename and its corresponding hash in the cache
      * 
@@ -191,7 +190,7 @@ impl CacheManager {
      * - Directory creation is lazy (only when first write occurs)
      */
     pub async fn store_hash(&self, filename: &str, argon2_hash: &str) -> Result<()> {
-        /** Validate input to prevent cache corruption */
+        // Validate input to prevent cache corruption
         if filename.is_empty() || filename.contains('\n') {
             return Err("store_hash: Invalid filename - must not be empty or contain newlines".into());
         }
@@ -201,7 +200,7 @@ impl CacheManager {
         }
 
         self.store_hash_internal(filename, argon2_hash).await
-    } /** store_hash */
+    } // store_hash
 
     /** Retrieves the hash for a specific filename
      * 
@@ -218,7 +217,7 @@ impl CacheManager {
      */
     pub async fn get_hash(&self, filename: &str) -> Result<Option<String>> {
         self.get_hash_fast(filename).await
-    } /** get_hash */
+    } // get_hash
 
     /** Efficiently retrieves hash using streaming without loading entire file to memory
      * 
@@ -233,7 +232,7 @@ impl CacheManager {
      * - Skips hash lines for non-matching filenames
      */
     pub async fn get_hash_fast(&self, filename: &str) -> Result<Option<String>> {
-        /** Early return if cache file doesn't exist */
+        // Early return if cache file doesn't exist
         if !self.cache_file.exists() {
             return Ok(None);
         }
@@ -242,28 +241,26 @@ impl CacheManager {
         let reader = BufReader::new(file);
         let mut lines = reader.lines();
         
-        /** Stream through file line by line */
+        // Stream through file line by line
         while let Some(line) = lines.next_line().await? {
             if line == filename {
-                /** Found matching filename, next line should be the hash */
+                // Found matching filename, next line should be the hash
                 if let Some(hash_line) = lines.next_line().await? {
                     if hash_line.starts_with("argon2:") {
-                        return Ok(Some(hash_line[7..].to_string())); /** Strip "argon2:" prefix */
+                        return Ok(Some(hash_line[7..].to_string())); // Strip "argon2:" prefix
                     }
                 }
             } else if line.starts_with("argon2:") {
-                /** Skip hash line when filename doesn't match
-                 * This ensures we're always reading pairs correctly
-                 */
+                // Skip hash line when filename doesn't match
+                // This ensures we're always reading pairs correctly
                 continue;
             }
-            /** If line is neither target filename nor hash line, 
-             * it's a different filename - continue to next pair
-             */
+            // If line is neither target filename nor hash line, 
+            // it's a different filename - continue to next pair
         }
         
-        Ok(None) /** Filename not found in cache */
-    } /** get_hash_fast */
+        Ok(None) // Filename not found in cache
+    } // get_hash_fast
 
     /** Loads all filename-hash pairs from cache into a HashMap
      * 
@@ -284,26 +281,26 @@ impl CacheManager {
         }
 
         let content = fs::read_to_string(&self.cache_file).await?;
-        let mut rate_curr_file = None; /** Tracks the current filename being processed */
+        let mut rate_curr_file = None; // Tracks the current filename being processed
 
-        /** Parse file content line by line */
+        // Parse file content line by line
         for line in content.lines() {
             if line.starts_with("argon2:") {
-                /** This is a hash line - pair it with the previous filename */
+                // This is a hash line - pair it with the previous filename
                 if let Some(file) = rate_curr_file.take() {
                     let hash = line.strip_prefix("argon2:").unwrap().to_string();
                     hashes.insert(file, hash);
                 }
-                /** If no rate_curr_file, this is an orphaned hash - skip it */
+                // If no rate_curr_file, this is an orphaned hash - skip it
             } else if !line.is_empty() {
-                /** This is a filename line - store it for next iteration */
+                // This is a filename line - store it for next iteration
                 rate_curr_file = Some(line.to_string());
             }
-            /** Empty lines are ignored */
+            // Empty lines are ignored
         }
 
         Ok(hashes)
-    } /** load_all_hashes */
+    } // load_all_hashes
 
     /** Removes a filename and its hash from the cache
      * 
@@ -327,30 +324,30 @@ impl CacheManager {
         let content = fs::read_to_string(&self.cache_file).await?;
         let mut new_content = String::new();
         let mut rate_curr_file = None;
-        let mut rate_skip_line = false; /** Flag to skip hash line after removed filename */
+        let mut rate_skip_line = false; // Flag to skip hash line after removed filename
 
         for line in content.lines() {
             if rate_skip_line {
-                /** Skip the hash line following a removed filename */
+                // Skip the hash line following a removed filename
                 rate_skip_line = false;
                 continue;
             }
 
             if line.starts_with("argon2:") {
-                /** This is a hash line */
+                // This is a hash line
                 if let Some(file) = &rate_curr_file {
                     if file != filename {
-                        /** Keep entries that don't match target filename */
+                        // Keep entries that don't match target filename
                         new_content.push_str(&format!("{}\n{}\n", file, line));
                     }
-                    /** If file matches filename, both filename and hash are skipped */
+                    // If file matches filename, both filename and hash are skipped
                 }
                 rate_curr_file = None;
             } else if !line.is_empty() {
-                /** This is a filename line */
+                // This is a filename line
                 if line == filename {
-                    /** Mark this entry for removal */
-                    rate_skip_line = true; /** Next line (hash) will be skipped */
+                    // Mark this entry for removal
+                    rate_skip_line = true; // Next line (hash) will be skipped
                     rate_curr_file = None;
                 } else {
                     rate_curr_file = Some(line.to_string());
@@ -358,10 +355,10 @@ impl CacheManager {
             }
         }
 
-        /** Write filtered content back to file */
+        // Write filtered content back to file
         fs::write(&self.cache_file, new_content).await?;
         Ok(())
-    } /** remove_hash */
+    } // remove_hash
 
     /** Updates the hash for an existing filename or adds it if not present
      * 
@@ -376,7 +373,7 @@ impl CacheManager {
     pub async fn update_hash(&self, filename: &str, new_hash: &str) -> Result<()> {
         self.remove_hash(filename).await?;
         self.store_hash(filename, new_hash).await
-    } /** update_hash */
+    } // update_hash
     
     /** Efficiently stores multiple entries in batch
      * 
@@ -391,17 +388,17 @@ impl CacheManager {
     pub async fn bulk_store(&self, entries: &HashMap<String, String>) -> Result<()> {
         let mut content = String::new();
         
-        /** Build all entries in memory first */
+        // Build all entries in memory first
         for (filename, hash) in entries {
             content.push_str(&format!("{}\nargon2:{}\n", filename, hash));
         }
         
-        /** Ensure cache directory exists */
+        // Ensure cache directory exists
         if let Some(parent) = self.cache_file.parent() {
             fs::create_dir_all(parent).await?;
         }
 
-        /** Single write operation for all entries */
+        // Single write operation for all entries
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -410,7 +407,7 @@ impl CacheManager {
 
         file.write_all(content.as_bytes()).await?;
         Ok(())
-    } /** bulk_store */
+    } // bulk_store
     
     /** Gets the size of the cache file in bytes
      * 
@@ -429,7 +426,7 @@ impl CacheManager {
         } else {
             Ok(0)
         }
-    } /** get_cache_size */
+    } // get_cache_size
     
     /** Finds files that have duplicate hashes (potential duplicate files)
      * 
@@ -446,16 +443,16 @@ impl CacheManager {
         let hashes = self.load_all_hashes().await?;
         let mut hash_to_files: HashMap<String, Vec<String>> = HashMap::new();
         
-        /** Group files by their hash */
+        // Group files by their hash
         for (file, hash) in hashes {
             hash_to_files.entry(hash).or_default().push(file);
         }
         
-        /** Filter to only include duplicates */
+        // Filter to only include duplicates
         Ok(hash_to_files.into_iter()
-            .filter(|(_, files)| files.len() > 1) /** Only keep hashes with multiple files */
+            .filter(|(_, files)| files.len() > 1) // Only keep hashes with multiple files
             .collect())
-    } /** rate_duplicate_hashes */
+    } // rate_duplicate_hashes
 
     /** Completely clears all entries from the cache
      * 
@@ -469,7 +466,7 @@ impl CacheManager {
             fs::write(&self.cache_file, "").await?;
         }
         Ok(())
-    } /** clear_cache */
+    } // clear_cache
 
     /** Checks if a filename exists in the cache
      * 
@@ -485,7 +482,7 @@ impl CacheManager {
      */
     pub async fn exists_cache(&self, filename: &str) -> Result<bool> {
         Ok(self.get_hash(filename).await?.is_some())
-    } /** exists_cache */
+    } // exists_cache
 
     /** Counts the number of entries in the cache
      * 
@@ -496,7 +493,7 @@ impl CacheManager {
     pub async fn count_cache(&self) -> Result<usize> {
         let hashes = self.load_all_hashes().await?;
         Ok(hashes.len())
-    } /** count_cache */
+    } // count_cache
 
     /** Lists all filenames stored in the cache
      * 
@@ -507,7 +504,7 @@ impl CacheManager {
     pub async fn list_files_cache(&self) -> Result<Vec<String>> {
         let hashes = self.load_all_hashes().await?;
         Ok(hashes.keys().cloned().collect())
-    } /** list_files_cache */
+    } // list_files_cache
 }
 
 /*
